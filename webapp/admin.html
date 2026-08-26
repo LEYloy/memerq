@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Кнопки</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #17181c;
+    --card: #1f2126;
+    --border: #2c2e34;
+    --text: #ffffff;
+    --muted: #8b8d94;
+    --accent: #34c759;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 16px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .hint { color: var(--muted); font-size: 13px; margin-bottom: 20px; line-height: 1.4; }
+  .preview-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 10px;
+    border: none;
+    font-size: 16px;
+    font-weight: 500;
+    color: #fff;
+    margin-bottom: 24px;
+    cursor: default;
+    transition: background 0.15s;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 16px 0 6px; }
+  input[type=text] {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 15px;
+  }
+  .counter { text-align: right; font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .colors { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+  .color-opt {
+    padding: 12px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 500;
+    color: #fff;
+    border: 2px solid transparent;
+    cursor: pointer;
+  }
+  .color-opt.selected { border-color: #fff; }
+  .note {
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+    margin-top: 20px;
+  }
+  .actions { display: flex; gap: 10px; margin-top: 24px; }
+  .btn { flex: 1; padding: 14px; border-radius: 10px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .btn-reset { background: #3a2a2a; color: #ff6b6b; }
+  .btn-save { background: var(--accent); color: #fff; }
+  .status { text-align: center; font-size: 13px; color: var(--muted); margin-top: 12px; min-height: 16px; }
+</style>
+</head>
+<body>
+
+<h1>Кнопки</h1>
+<div class="hint">
+  Настройте текст и эмодзи кнопки товара. Изменения применятся к кнопке в боте
+  сразу после сохранения.
+</div>
+
+<button class="preview-btn" id="preview" style="background:#34c759;">🧸 Мишка — 15⭐</button>
+
+<label>Текст кнопки</label>
+<input type="text" id="btnText" maxlength="64" value="🧸 Мишка — 15⭐">
+<div class="counter"><span id="charCount">0</span>/64</div>
+
+<label>Цвет (только для превью в панели — Telegram не красит обычные кнопки в чате)</label>
+<div class="colors">
+  <div class="color-opt selected" data-color="#3a3d44" style="background:#3a3d44;">Обычный</div>
+  <div class="color-opt" data-color="#3390ec" style="background:#3390ec;">Синий</div>
+  <div class="color-opt" data-color="#34c759" style="background:#34c759;">Зелёный</div>
+  <div class="color-opt" data-color="#e05353" style="background:#e05353;">Красный</div>
+</div>
+
+<label>Premium-эмодзи ID (необязательно, сохраняется как заметка)</label>
+<input type="text" id="premiumEmoji" placeholder="5416150087817615866">
+
+<div class="note">
+  ⚠️ Telegram Bot API не поддерживает цветные inline-кнопки и custom/premium-эмодзи
+  внутри текста кнопки — это исключительно интерфейс BotFather для его собственных
+  экранов. В реальном чате кнопка бота останется стандартного серого цвета клиента,
+  с обычным юникод-эмодзи в тексте (если вы его укажете). Цвет и Premium-эмодзи ID
+  здесь сохраняются как метаданные — на случай, если решите использовать их
+  где-то ещё (например, в самом мини-аппе).
+</div>
+
+<div class="actions">
+  <button class="btn btn-reset" id="resetBtn">↺ Сбросить</button>
+  <button class="btn btn-save" id="saveBtn">Сохранить</button>
+</div>
+<div class="status" id="status"></div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+const DEFAULT = { text: "🧸 Мишка — 15⭐", color: "#3a3d44", premiumEmoji: "" };
+
+const textInput = document.getElementById('btnText');
+const preview = document.getElementById('preview');
+const charCount = document.getElementById('charCount');
+const status = document.getElementById('status');
+const premiumInput = document.getElementById('premiumEmoji');
+let selectedColor = DEFAULT.color;
+
+function updatePreview() {
+  preview.textContent = textInput.value || "Кнопка";
+  preview.style.background = selectedColor;
+  charCount.textContent = textInput.value.length;
+}
+
+textInput.addEventListener('input', updatePreview);
+
+document.querySelectorAll('.color-opt').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.color-opt').forEach(o => o.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedColor = el.dataset.color;
+    updatePreview();
+  });
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  textInput.value = DEFAULT.text;
+  premiumInput.value = DEFAULT.premiumEmoji;
+  selectedColor = DEFAULT.color;
+  document.querySelectorAll('.color-opt').forEach(o => o.classList.remove('selected'));
+  document.querySelector('.color-opt[data-color="' + DEFAULT.color + '"]').classList.add('selected');
+  updatePreview();
+});
+
+document.getElementById('saveBtn').addEventListener('click', () => {
+  const payload = {
+    action: "save_button_config",
+    text: textInput.value.trim() || DEFAULT.text,
+    color: selectedColor,
+    premium_emoji_id: premiumInput.value.trim(),
+  };
+  if (tg) {
+    tg.sendData(JSON.stringify(payload));
+    status.textContent = "Отправлено боту...";
+  } else {
+    status.textContent = "Открыто вне Telegram — сохранение недоступно.";
+  }
+});
+
+updatePreview();
+</script>
+</body>
+</html>
