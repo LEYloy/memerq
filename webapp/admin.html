@@ -79,34 +79,33 @@
 
 <h1>Кнопки</h1>
 <div class="hint">
-  Настройте текст и эмодзи кнопки товара. Изменения применятся к кнопке в боте
-  сразу после сохранения.
+  Настройте текст, цвет и Premium-эмодзи кнопки товара. Изменения применятся
+  к реальной кнопке в боте сразу после сохранения (Bot API 9.4).
 </div>
 
-<button class="preview-btn" id="preview" style="background:#34c759;">🧸 Мишка — 15⭐</button>
+<button class="preview-btn" id="preview" style="background:#3a3d44;">🧸 Мишка — 15⭐</button>
 
 <label>Текст кнопки</label>
 <input type="text" id="btnText" maxlength="64" value="🧸 Мишка — 15⭐">
 <div class="counter"><span id="charCount">0</span>/64</div>
 
-<label>Цвет (только для превью в панели — Telegram не красит обычные кнопки в чате)</label>
+<label>Цвет кнопки</label>
 <div class="colors">
-  <div class="color-opt selected" data-color="#3a3d44" style="background:#3a3d44;">Обычный</div>
-  <div class="color-opt" data-color="#3390ec" style="background:#3390ec;">Синий</div>
-  <div class="color-opt" data-color="#34c759" style="background:#34c759;">Зелёный</div>
-  <div class="color-opt" data-color="#e05353" style="background:#e05353;">Красный</div>
+  <div class="color-opt selected" data-style="" data-color="#3a3d44" style="background:#3a3d44;">Обычный</div>
+  <div class="color-opt" data-style="primary" data-color="#3390ec" style="background:#3390ec;">Синий</div>
+  <div class="color-opt" data-style="success" data-color="#34c759" style="background:#34c759;">Зелёный</div>
+  <div class="color-opt" data-style="danger" data-color="#e05353" style="background:#e05353;">Красный</div>
 </div>
 
-<label>Premium-эмодзи ID (необязательно, сохраняется как заметка)</label>
-<input type="text" id="premiumEmoji" placeholder="5416150087817615866">
+<label>Premium-эмодзи ID (необязательно)</label>
+<input type="text" id="premiumEmoji" placeholder="5373230968943420212">
 
 <div class="note">
-  ⚠️ Telegram Bot API не поддерживает цветные inline-кнопки и custom/premium-эмодзи
-  внутри текста кнопки — это исключительно интерфейс BotFather для его собственных
-  экранов. В реальном чате кнопка бота останется стандартного серого цвета клиента,
-  с обычным юникод-эмодзи в тексте (если вы его укажете). Цвет и Premium-эмодзи ID
-  здесь сохраняются как метаданные — на случай, если решите использовать их
-  где-то ещё (например, в самом мини-аппе).
+  ⚠️ Эмодзи покажется на кнопке, только если у владельца бота есть активная
+  подписка Telegram Premium (или у бота куплен доп. юзернейм на Fragment) —
+  без этого Telegram поле проигнорирует.<br><br>
+  ⚠️ Цвет кнопки виден только в клиентах Telegram, выпущенных после
+  9 февраля 2026 — в старых версиях кнопка отобразится как обычно, без стиля.
 </div>
 
 <div class="actions">
@@ -119,13 +118,14 @@
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 
-const DEFAULT = { text: "🧸 Мишка — 15⭐", color: "#3a3d44", premiumEmoji: "" };
+const DEFAULT = { text: "🧸 Мишка — 15⭐", style: "", color: "#3a3d44", premiumEmoji: "" };
 
 const textInput = document.getElementById('btnText');
 const preview = document.getElementById('preview');
 const charCount = document.getElementById('charCount');
 const status = document.getElementById('status');
 const premiumInput = document.getElementById('premiumEmoji');
+let selectedStyle = DEFAULT.style;
 let selectedColor = DEFAULT.color;
 
 function updatePreview() {
@@ -140,6 +140,7 @@ document.querySelectorAll('.color-opt').forEach(el => {
   el.addEventListener('click', () => {
     document.querySelectorAll('.color-opt').forEach(o => o.classList.remove('selected'));
     el.classList.add('selected');
+    selectedStyle = el.dataset.style;
     selectedColor = el.dataset.color;
     updatePreview();
   });
@@ -148,9 +149,10 @@ document.querySelectorAll('.color-opt').forEach(el => {
 document.getElementById('resetBtn').addEventListener('click', () => {
   textInput.value = DEFAULT.text;
   premiumInput.value = DEFAULT.premiumEmoji;
+  selectedStyle = DEFAULT.style;
   selectedColor = DEFAULT.color;
   document.querySelectorAll('.color-opt').forEach(o => o.classList.remove('selected'));
-  document.querySelector('.color-opt[data-color="' + DEFAULT.color + '"]').classList.add('selected');
+  document.querySelector('.color-opt[data-style=""]').classList.add('selected');
   updatePreview();
 });
 
@@ -158,8 +160,8 @@ document.getElementById('saveBtn').addEventListener('click', () => {
   const payload = {
     action: "save_button_config",
     text: textInput.value.trim() || DEFAULT.text,
-    color: selectedColor,
-    premium_emoji_id: premiumInput.value.trim(),
+    style: selectedStyle || null,
+    icon_custom_emoji_id: premiumInput.value.trim(),
   };
   if (tg) {
     tg.sendData(JSON.stringify(payload));
