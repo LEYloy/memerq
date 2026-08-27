@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Аренда NFT</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #0f1113;
+    --card: #171a1d;
+    --card-border: #22262a;
+    --accent: #34c759;
+    --text: #ffffff;
+    --muted: #8b8d94;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 16px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .hint { color: var(--muted); font-size: 13px; margin-bottom: 20px; line-height: 1.4; }
+  .warning {
+    background: rgba(224,83,83,0.1);
+    border: 1px solid rgba(224,83,83,0.3);
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 12px;
+    color: #e05353;
+    line-height: 1.5;
+    margin-bottom: 20px;
+  }
+  .gift-list { display: flex; flex-direction: column; gap: 10px; }
+  .gift-card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    padding: 14px;
+    cursor: pointer;
+  }
+  .gift-card.selected { border-color: var(--accent); }
+  .gift-card .title { font-weight: 600; font-size: 15px; }
+  .gift-card .num { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  .durations { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 16px; }
+  .duration-opt {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+  }
+  .duration-opt.selected { border-color: var(--accent); }
+  .duration-opt .label { font-weight: 500; }
+  .duration-opt .price { color: var(--muted); font-size: 13px; }
+
+  label { display: block; font-size: 13px; color: var(--muted); margin: 20px 0 6px; }
+  .btn { width: 100%; padding: 14px; border-radius: 10px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; background: var(--accent); color: #fff; margin-top: 16px; }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .status { text-align: center; font-size: 13px; color: var(--muted); margin-top: 12px; min-height: 16px; }
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+</style>
+</head>
+<body>
+
+<h1>Аренда NFT</h1>
+<div class="hint">Выберите подарок и срок аренды.</div>
+
+<div class="warning">
+  ⚠️ Подарок реально перейдёт на ваш аккаунт. Депозит возвращается только
+  если вы вручную вернёте тот же подарок владельцу до конца срока аренды
+  (плюс льготный период). Если не вернёте — депозит не возвращается.
+</div>
+
+<div class="gift-list" id="giftList"></div>
+
+<div id="durationsBlock" style="display:none;">
+  <label>Срок аренды</label>
+  <div class="durations" id="durationsList"></div>
+</div>
+
+<button class="btn" id="rentBtn" disabled>Оформить аренду</button>
+<div class="status" id="status"></div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+const params = new URLSearchParams(window.location.search);
+let data = { gifts: [], durations: [] };
+try {
+  const raw = params.get('data');
+  if (raw) data = JSON.parse(atob(raw.replace(/-/g, '+').replace(/_/g, '/')));
+} catch (e) {
+  console.error('bad data param', e);
+}
+
+let selectedGift = null;
+let selectedDuration = null;
+
+const giftListEl = document.getElementById('giftList');
+const durationsBlock = document.getElementById('durationsBlock');
+const durationsListEl = document.getElementById('durationsList');
+const rentBtn = document.getElementById('rentBtn');
+const statusEl = document.getElementById('status');
+
+if (!data.gifts.length) {
+  giftListEl.innerHTML = '<div class="empty">Сейчас нет подарков, доступных для аренды.</div>';
+} else {
+  data.gifts.forEach(g => {
+    const el = document.createElement('div');
+    el.className = 'gift-card';
+    el.innerHTML = `<div class="title">${g.title}</div><div class="num">#${g.num}</div>`;
+    el.addEventListener('click', () => {
+      document.querySelectorAll('.gift-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      selectedGift = g;
+      durationsBlock.style.display = 'block';
+      updateButton();
+    });
+    giftListEl.appendChild(el);
+  });
+
+  data.durations.forEach(d => {
+    const el = document.createElement('div');
+    el.className = 'duration-opt';
+    el.innerHTML = `<span class="label">${d.label}</span><span class="price">${d.fee} + ${d.deposit} депозит</span>`;
+    el.addEventListener('click', () => {
+      document.querySelectorAll('.duration-opt').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      selectedDuration = d;
+      updateButton();
+    });
+    durationsListEl.appendChild(el);
+  });
+}
+
+function updateButton() {
+  rentBtn.disabled = !(selectedGift && selectedDuration);
+}
+
+rentBtn.addEventListener('click', () => {
+  if (!selectedGift || !selectedDuration) return;
+  const payload = {
+    action: 'rent_gift',
+    gift_msg_id: selectedGift.msg_id,
+    gift_slug: selectedGift.slug,
+    gift_title: selectedGift.title,
+    duration_hours: selectedDuration.hours,
+  };
+  if (tg) {
+    tg.sendData(JSON.stringify(payload));
+    statusEl.textContent = 'Отправлено боту...';
+  } else {
+    statusEl.textContent = 'Открыто вне Telegram — оформление недоступно.';
+  }
+});
+</script>
+</body>
+</html>
