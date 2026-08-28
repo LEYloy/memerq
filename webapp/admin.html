@@ -122,6 +122,14 @@
   .btn { flex: 1; padding: 14px; border-radius: 10px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; }
   .btn-save { background: var(--accent); color: #fff; }
   .status { text-align: center; font-size: 13px; color: var(--muted); margin-top: 12px; min-height: 16px; }
+  .hg-item {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--card); border: 1px solid var(--card-border);
+    border-radius: 10px; padding: 12px; margin-bottom: 8px;
+  }
+  .hg-item .info { font-size: 14px; }
+  .hg-item .info .sub { color: var(--muted); font-size: 12px; }
+  .hg-item .remove { color: #e05353; font-size: 13px; cursor: pointer; background: none; border: none; }
 </style>
 </head>
 <body>
@@ -146,11 +154,10 @@
     <div class="name">Кнопки</div>
     <div class="desc">Цвет, текст, эмодзи</div>
   </div>
-  <div class="card disabled">
-    <span class="soon">Скоро</span>
-    <span class="emoji">🖼</span>
-    <div class="name">Картинки</div>
-    <div class="desc">Оформление разделов</div>
+  <div class="card" data-view="hidden">
+    <span class="emoji">🎁</span>
+    <div class="name">Скрытые подарки</div>
+    <div class="desc">Добавить по ID</div>
   </div>
   <div class="card disabled">
     <span class="soon">Скоро</span>
@@ -221,6 +228,38 @@
   <div class="status" id="statusButtons"></div>
 </div>
 
+<!-- Скрытые подарки -->
+<div class="subview" id="view-hidden">
+  <div class="back" data-back="1">‹ Назад</div>
+  <h2>Скрытые подарки</h2>
+  <div class="hint">
+    Подарки, которых нет в обычном каталоге Telegram (раскуплены/сняты), но
+    их всё ещё можно отправить, если знать точный ID. Добавьте сюда — они
+    появятся у покупателей отдельной кнопкой «🎁 Скрытые подарки».
+    Панель закрывается после каждого действия — так работает Telegram
+    (sendData), для следующего действия откройте /admin заново.
+  </div>
+
+  <div id="hiddenGiftsList"></div>
+
+  <label>ID подарка</label>
+  <input type="text" id="hgId" placeholder="5170233102089322756">
+
+  <label>Название</label>
+  <input type="text" id="hgName" maxlength="64" placeholder="Редкий торт">
+
+  <label>Цена в звёздах (для отображения)</label>
+  <input type="text" id="hgStars" placeholder="50">
+
+  <label>Цена в криптовалюте (сумма счёта)</label>
+  <input type="text" id="hgPrice" placeholder="1.2">
+
+  <div class="actions">
+    <button class="btn btn-save" id="hgAddBtn">Добавить подарок</button>
+  </div>
+  <div class="status" id="statusHidden"></div>
+</div>
+
 <script>
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
@@ -229,6 +268,14 @@ const params = new URLSearchParams(window.location.search);
 const botUsername = params.get('bot');
 if (botUsername) {
   document.getElementById('botPill').textContent = '⭐ @' + botUsername;
+}
+
+let hiddenGifts = [];
+try {
+  const raw = params.get('hidden');
+  if (raw) hiddenGifts = JSON.parse(atob(raw.replace(/-/g, '+').replace(/_/g, '/')));
+} catch (e) {
+  console.error('bad hidden param', e);
 }
 
 // --- навигация между карточками и подэкранами ---
@@ -281,7 +328,68 @@ document.querySelectorAll('.color-opt').forEach(el => {
 });
 updatePreview();
 
-// --- сохранение ---
+// --- Скрытые подарки ---
+function renderHiddenGifts() {
+  const list = document.getElementById('hiddenGiftsList');
+  list.innerHTML = '';
+  if (!hiddenGifts.length) {
+    list.innerHTML = '<div class="hint">Список пуст — добавьте первый подарок ниже.</div>';
+    return;
+  }
+  hiddenGifts.forEach(g => {
+    const el = document.createElement('div');
+    el.className = 'hg-item';
+    el.innerHTML = `
+      <div class="info">${g.name} — ${g.stars}⭐<div class="sub">${g.price_amount} · id ${g.id}</div></div>
+      <button class="remove" data-remove-id="${g.id}">Удалить</button>
+    `;
+    list.appendChild(el);
+  });
+  document.querySelectorAll('[data-remove-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.removeId;
+      hiddenGifts = hiddenGifts.filter(g => g.id !== id);
+      renderHiddenGifts();
+      if (tg) {
+        tg.sendData(JSON.stringify({ action: 'remove_hidden_gift', id }));
+        document.getElementById('statusHidden').textContent = 'Удалено.';
+      }
+    });
+  });
+}
+renderHiddenGifts();
+
+document.getElementById('hgAddBtn').addEventListener('click', () => {
+  const id = document.getElementById('hgId').value.trim();
+  const name = document.getElementById('hgName').value.trim();
+  const stars = document.getElementById('hgStars').value.trim();
+  const price = document.getElementById('hgPrice').value.trim();
+  const statusEl = document.getElementById('statusHidden');
+
+  if (!id || !name || !stars || !price) {
+    statusEl.textContent = 'Заполните все поля.';
+    return;
+  }
+
+  hiddenGifts = hiddenGifts.filter(g => g.id !== id);
+  hiddenGifts.push({ id, name, stars: Number(stars), price_amount: price });
+  renderHiddenGifts();
+
+  if (tg) {
+    tg.sendData(JSON.stringify({
+      action: 'add_hidden_gift', id, name, stars: Number(stars), price_amount: price,
+    }));
+    statusEl.textContent = 'Отправлено боту...';
+    document.getElementById('hgId').value = '';
+    document.getElementById('hgName').value = '';
+    document.getElementById('hgStars').value = '';
+    document.getElementById('hgPrice').value = '';
+  } else {
+    statusEl.textContent = 'Открыто вне Telegram — сохранение недоступно.';
+  }
+});
+
+// --- сохранение (Тексты/Кнопки) ---
 document.querySelectorAll('[data-save]').forEach(btn => {
   btn.addEventListener('click', () => {
     const kind = btn.dataset.save;
