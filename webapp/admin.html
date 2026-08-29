@@ -90,7 +90,7 @@
   h2 { font-size: 18px; margin: 8px 0 4px; }
   .hint { color: var(--muted); font-size: 13px; margin-bottom: 16px; line-height: 1.4; }
   label { display: block; font-size: 13px; color: var(--muted); margin: 16px 0 6px; }
-  textarea, input[type=text] {
+  textarea, input[type=text], input[type=number] {
     width: 100%;
     padding: 12px;
     border-radius: 10px;
@@ -122,7 +122,7 @@
   .btn { flex: 1; padding: 14px; border-radius: 10px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; }
   .btn-save { background: var(--accent); color: #fff; }
   .status { text-align: center; font-size: 13px; color: var(--muted); margin-top: 12px; min-height: 16px; }
-  .hg-item {
+  .hg-item, .menu-item {
     display: flex; justify-content: space-between; align-items: center;
     background: var(--card); border: 1px solid var(--card-border);
     border-radius: 10px; padding: 12px; margin-bottom: 8px;
@@ -130,6 +130,21 @@
   .hg-item .info { font-size: 14px; }
   .hg-item .info .sub { color: var(--muted); font-size: 12px; }
   .hg-item .remove { color: #e05353; font-size: 13px; cursor: pointer; background: none; border: none; }
+  .menu-item .label { font-size: 14px; font-weight: 500; }
+  .menu-item .arrows { display: flex; gap: 6px; }
+  .menu-item .arrows button {
+    width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--card-border);
+    background: var(--bg); color: var(--text); font-size: 14px; cursor: pointer;
+  }
+  .toolbar { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  .toolbar button {
+    width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--card-border);
+    background: var(--card); color: var(--text); font-size: 14px; cursor: pointer;
+  }
+  .toolbar button.b { font-weight: 700; }
+  .toolbar button.i { font-style: italic; }
+  .toolbar button.u { text-decoration: underline; }
+  .toolbar button.s { text-decoration: line-through; }
 </style>
 </head>
 <body>
@@ -159,23 +174,21 @@
     <div class="name">Скрытые подарки</div>
     <div class="desc">Добавить по ID</div>
   </div>
+  <div class="card" data-view="menu">
+    <span class="emoji">🧭</span>
+    <div class="name">Меню</div>
+    <div class="desc">Порядок кнопок</div>
+  </div>
+  <div class="card" data-view="referrals">
+    <span class="emoji">👥</span>
+    <div class="name">Рефералы</div>
+    <div class="desc">Процент вознаграждения</div>
+  </div>
   <div class="card disabled">
     <span class="soon">Скоро</span>
     <span class="emoji">📣</span>
     <div class="name">Рассылка</div>
     <div class="desc">Пост, кнопки, расписание</div>
-  </div>
-  <div class="card disabled">
-    <span class="soon">Скоро</span>
-    <span class="emoji">👥</span>
-    <div class="name">Рефералы</div>
-    <div class="desc">Процент и исключения</div>
-  </div>
-  <div class="card disabled">
-    <span class="soon">Скоро</span>
-    <span class="emoji">%</span>
-    <div class="name">Наценки</div>
-    <div class="desc">Курсы и надбавки</div>
   </div>
 </div>
 
@@ -183,7 +196,21 @@
 <div class="subview" id="view-texts">
   <div class="back" data-back="1">‹ Назад</div>
   <h2>Тексты</h2>
-  <div class="hint">Сообщение, которое бот присылает по команде /start. Поддерживается базовый HTML: &lt;b&gt;жирный&lt;/b&gt;.</div>
+  <div class="hint">
+    Сообщение, которое бот присылает по команде /start. Поддерживается
+    форматирование Telegram — выделите текст в поле и нажмите нужную кнопку.
+  </div>
+
+  <div class="toolbar">
+    <button class="b" data-wrap="b" title="Жирный">B</button>
+    <button class="i" data-wrap="i" title="Курсив">I</button>
+    <button class="u" data-wrap="u" title="Подчёркнутый">U</button>
+    <button class="s" data-wrap="s" title="Зачёркнутый">S</button>
+    <button data-wrap="tg-spoiler" title="Спойлер">🙈</button>
+    <button data-wrap="blockquote" title="Цитата">❝</button>
+    <button data-wrap="code" title="Код">&lt;/&gt;</button>
+  </div>
+
   <label>Текст /start</label>
   <textarea id="startText" maxlength="1024"></textarea>
   <div class="counter"><span id="startCharCount">0</span>/1024</div>
@@ -260,6 +287,42 @@
   <div class="status" id="statusHidden"></div>
 </div>
 
+<!-- Меню -->
+<div class="subview" id="view-menu">
+  <div class="back" data-back="1">‹ Назад</div>
+  <h2>Меню</h2>
+  <div class="hint">
+    Порядок кнопок в главном меню бота (/start). Стрелками поднимайте или
+    опускайте пункт.
+  </div>
+
+  <div id="menuList"></div>
+
+  <div class="actions">
+    <button class="btn btn-save" id="menuSaveBtn">Сохранить порядок</button>
+  </div>
+  <div class="status" id="statusMenu"></div>
+</div>
+
+<!-- Рефералы -->
+<div class="subview" id="view-referrals">
+  <div class="back" data-back="1">‹ Назад</div>
+  <h2>Рефералы</h2>
+  <div class="hint">
+    Процент от суммы оплаты, который получает пользователь за каждую
+    покупку приглашённого им человека. Начисляется в накопленный баланс,
+    видимый в разделе «Профиль» у самого пользователя.
+  </div>
+
+  <label>Процент (0–100)</label>
+  <input type="number" id="refPercent" min="0" max="100" value="10">
+
+  <div class="actions">
+    <button class="btn btn-save" id="refSaveBtn">Сохранить</button>
+  </div>
+  <div class="status" id="statusReferrals"></div>
+</div>
+
 <script>
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
@@ -270,13 +333,15 @@ if (botUsername) {
   document.getElementById('botPill').textContent = '⭐ @' + botUsername;
 }
 
-let hiddenGifts = [];
+let state = { hidden_gifts: [], menu_order: ['buy', 'hidden', 'profile', 'test'], referral_percent: 10 };
 try {
-  const raw = params.get('hidden');
-  if (raw) hiddenGifts = JSON.parse(atob(raw.replace(/-/g, '+').replace(/_/g, '/')));
+  const raw = params.get('state');
+  if (raw) state = { ...state, ...JSON.parse(atob(raw.replace(/-/g, '+').replace(/_/g, '/'))) };
 } catch (e) {
-  console.error('bad hidden param', e);
+  console.error('bad state param', e);
 }
+let hiddenGifts = state.hidden_gifts;
+let menuOrder = state.menu_order;
 
 // --- навигация между карточками и подэкранами ---
 document.querySelectorAll('.card[data-view]').forEach(card => {
@@ -294,11 +359,27 @@ document.querySelectorAll('[data-back]').forEach(btn => {
   });
 });
 
-// --- Тексты ---
+// --- Тексты: rich text toolbar ---
 const startTextEl = document.getElementById('startText');
 const startCharCount = document.getElementById('startCharCount');
 startTextEl.addEventListener('input', () => {
   startCharCount.textContent = startTextEl.value.length;
+});
+
+document.querySelectorAll('[data-wrap]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tag = btn.dataset.wrap;
+    const el = startTextEl;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = el.value.slice(start, end) || 'текст';
+    const wrapped = `<${tag}>${selected}</${tag}>`;
+    el.value = el.value.slice(0, start) + wrapped + el.value.slice(end);
+    el.focus();
+    el.selectionStart = start;
+    el.selectionEnd = start + wrapped.length;
+    startCharCount.textContent = el.value.length;
+  });
 });
 
 // --- Кнопки ---
@@ -384,6 +465,59 @@ document.getElementById('hgAddBtn').addEventListener('click', () => {
     document.getElementById('hgName').value = '';
     document.getElementById('hgStars').value = '';
     document.getElementById('hgPrice').value = '';
+  } else {
+    statusEl.textContent = 'Открыто вне Telegram — сохранение недоступно.';
+  }
+});
+
+// --- Меню (реордер стрелками) ---
+const MENU_LABELS = { buy: '🧸 Товар', hidden: '🎁 Скрытые подарки', profile: '👤 Профиль', test: '🧪 Тест' };
+
+function renderMenu() {
+  const list = document.getElementById('menuList');
+  list.innerHTML = '';
+  menuOrder.forEach((key, idx) => {
+    const el = document.createElement('div');
+    el.className = 'menu-item';
+    el.innerHTML = `
+      <div class="label">${MENU_LABELS[key] || key}</div>
+      <div class="arrows">
+        <button data-move="up" data-idx="${idx}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+        <button data-move="down" data-idx="${idx}" ${idx === menuOrder.length - 1 ? 'disabled' : ''}>↓</button>
+      </div>
+    `;
+    list.appendChild(el);
+  });
+  document.querySelectorAll('[data-move]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.idx);
+      const dir = btn.dataset.move === 'up' ? -1 : 1;
+      const swapIdx = idx + dir;
+      [menuOrder[idx], menuOrder[swapIdx]] = [menuOrder[swapIdx], menuOrder[idx]];
+      renderMenu();
+    });
+  });
+}
+renderMenu();
+
+document.getElementById('menuSaveBtn').addEventListener('click', () => {
+  const statusEl = document.getElementById('statusMenu');
+  if (tg) {
+    tg.sendData(JSON.stringify({ action: 'save_menu_order', order: menuOrder }));
+    statusEl.textContent = 'Отправлено боту...';
+  } else {
+    statusEl.textContent = 'Открыто вне Telegram — сохранение недоступно.';
+  }
+});
+
+// --- Рефералы ---
+document.getElementById('refPercent').value = state.referral_percent;
+document.getElementById('refSaveBtn').addEventListener('click', () => {
+  const percent = Number(document.getElementById('refPercent').value);
+  const statusEl = document.getElementById('statusReferrals');
+  if (tg) {
+    tg.sendData(JSON.stringify({ action: 'save_referral_percent', percent }));
+    statusEl.textContent = 'Отправлено боту...';
   } else {
     statusEl.textContent = 'Открыто вне Telegram — сохранение недоступно.';
   }

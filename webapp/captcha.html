@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Проверка</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #0f1113;
+    --card: #171a1d;
+    --card-border: #22262a;
+    --accent: #34c759;
+    --text: #ffffff;
+    --muted: #8b8d94;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 24px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+  }
+  .icon { font-size: 40px; margin-bottom: 8px; }
+  h1 { font-size: 18px; margin: 0 0 4px; text-align: center; }
+  .hint { color: var(--muted); font-size: 13px; margin-bottom: 24px; text-align: center; }
+  .question {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 28px;
+  }
+  .options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    max-width: 320px;
+  }
+  .opt {
+    padding: 20px;
+    border-radius: 14px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    font-size: 22px;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+  }
+  .opt.correct { background: rgba(52,199,89,0.2); border-color: var(--accent); }
+  .opt.wrong { background: rgba(224,83,83,0.2); border-color: #e05353; }
+  .status { margin-top: 20px; font-size: 14px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="icon">🧩</div>
+<h1>Подтвердите, что вы не бот</h1>
+<div class="hint">Простой пример — выберите правильный ответ</div>
+
+<div class="question" id="question">?</div>
+<div class="options" id="options"></div>
+<div class="status" id="status"></div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+const params = new URLSearchParams(window.location.search);
+let data = { a: 2, b: 2, options: [4, 3, 5, 6] };
+try {
+  const raw = params.get('data');
+  if (raw) data = JSON.parse(atob(raw.replace(/-/g, '+').replace(/_/g, '/')));
+} catch (e) {
+  console.error('bad data param', e);
+}
+
+document.getElementById('question').textContent = `${data.a} + ${data.b} = ?`;
+
+const optionsEl = document.getElementById('options');
+const statusEl = document.getElementById('status');
+let answered = false;
+
+data.options.forEach(opt => {
+  const el = document.createElement('div');
+  el.className = 'opt';
+  el.textContent = opt;
+  el.addEventListener('click', () => {
+    if (answered) return;
+    answered = true;
+    const correct = data.a + data.b;
+    el.classList.add(opt === correct ? 'correct' : 'wrong');
+
+    if (tg) {
+      tg.sendData(JSON.stringify({ action: 'captcha_answer', answer: opt }));
+      statusEl.textContent = 'Отправлено боту...';
+    } else {
+      statusEl.textContent = 'Открыто вне Telegram — проверка недоступна.';
+    }
+  });
+  optionsEl.appendChild(el);
+});
+</script>
+</body>
+</html>
