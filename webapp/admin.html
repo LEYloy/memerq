@@ -35,7 +35,9 @@
     border-radius: 9px;
     display: flex; align-items: center; justify-content: center;
     font-size: 18px;
+    overflow: hidden;
   }
+  .header .icon img { width: 100%; height: 100%; object-fit: contain; }
   .header .title { font-size: 17px; font-weight: 600; }
   .header .bot-pill {
     margin-left: auto;
@@ -150,9 +152,9 @@
 <body>
 
 <div class="header">
-  <div class="icon">⭐</div>
+  <div class="icon"><img src="https://panel.umarkets.life/icons/module-stars.png" alt=""></div>
   <div class="title">Панель</div>
-  <div class="bot-pill" id="botPill">⭐ @бот</div>
+  <div class="bot-pill" id="botPill"><img src="https://panel.umarkets.life/icons/module-stars.png" alt="" style="width:14px;height:14px;"> @бот</div>
 </div>
 
 <div class="section-label" id="overviewLabel">Управление ботом</div>
@@ -180,7 +182,7 @@
     <div class="desc">Порядок кнопок</div>
   </div>
   <div class="card" data-view="referrals">
-    <span class="emoji">👥</span>
+    <span class="emoji"><img src="https://i.ibb.co/ycLHgm6V/images-6.png" alt="" style="width:22px;height:22px;object-fit:contain;"></span>
     <div class="name">Рефералы</div>
     <div class="desc">Процент вознаграждения</div>
   </div>
@@ -330,7 +332,11 @@ if (tg) { tg.ready(); tg.expand(); }
 const params = new URLSearchParams(window.location.search);
 const botUsername = params.get('bot');
 if (botUsername) {
-  document.getElementById('botPill').textContent = '⭐ @' + botUsername;
+  const botPillLabel = document.querySelector('#botPill');
+  if (botPillLabel) {
+    botPillLabel.innerHTML =
+      '<img src="https://panel.umarkets.life/icons/module-stars.png" alt="" style="width:14px;height:14px;"> @' + botUsername;
+  }
 }
 
 let state = { hidden_gifts: [], menu_order: ['buy', 'hidden', 'profile', 'test'], referral_percent: 10 };
