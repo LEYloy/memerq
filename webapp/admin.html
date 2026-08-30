@@ -186,6 +186,11 @@
     <div class="name">Рефералы</div>
     <div class="desc">Процент вознаграждения</div>
   </div>
+  <div class="card" data-view="promo">
+    <span class="emoji">🎟</span>
+    <div class="name">Промокоды</div>
+    <div class="desc">Скидки на покупку</div>
+  </div>
   <div class="card disabled">
     <span class="soon">Скоро</span>
     <span class="emoji">📣</span>
@@ -231,7 +236,15 @@
 <div class="subview" id="view-buttons">
   <div class="back" data-back="1">‹ Назад</div>
   <h2>Кнопки</h2>
-  <div class="hint">Текст, цвет и Premium-эмодзи кнопки товара (Bot API 9.4).</div>
+  <div class="hint">Текст, цвет и Premium-эмодзи — для КАЖДОЙ кнопки меню отдельно (Bot API 9.4).</div>
+
+  <label>Какую кнопку редактировать</label>
+  <select id="buttonKeySelect">
+    <option value="buy">Товар (главная кнопка покупки)</option>
+    <option value="hidden">Скрытые подарки</option>
+    <option value="profile">Профиль</option>
+    <option value="test">Тест (без оплаты)</option>
+  </select>
 
   <button class="preview-btn" id="preview" style="background:#3a3d44;">🧸 Мишка — 15⭐</button>
 
@@ -257,10 +270,37 @@
   </div>
 
   <div class="actions">
-    <button class="btn btn-save" data-save="buttons">Сохранить</button>
+    <button class="btn btn-save" id="saveButtonBtn">Сохранить эту кнопку</button>
   </div>
   <div class="status" id="statusButtons"></div>
 </div>
+
+<!-- Промокоды -->
+<div class="subview" id="view-promo">
+  <div class="back" data-back="1">‹ Назад</div>
+  <h2>Промокоды</h2>
+  <div class="hint">
+    Промокод даёт разовую скидку на следующую покупку пользователя. Активируется
+    в разделе «Профиль» бота, действует один раз, лимит использований общий.
+  </div>
+
+  <div id="promoList"></div>
+
+  <label>Код</label>
+  <input type="text" id="promoCode" placeholder="SALE20">
+
+  <label>Скидка, %</label>
+  <input type="number" id="promoPercent" min="0" max="100" placeholder="20">
+
+  <label>Лимит использований</label>
+  <input type="number" id="promoMaxUses" min="1" placeholder="100">
+
+  <div class="actions">
+    <button class="btn btn-save" id="promoAddBtn">Добавить промокод</button>
+  </div>
+  <div class="status" id="statusPromo"></div>
+</div>
+
 
 <!-- Скрытые подарки -->
 <div class="subview" id="view-hidden">
@@ -350,6 +390,8 @@ let state = {
   referral_percent: 10,
   texts: { start_text: '' },
   text_descriptions: { start_text: 'Сообщение /start' },
+  buttons: {},
+  promo_codes: [],
 };
 try {
   const raw = params.get('state');
@@ -446,20 +488,37 @@ document.getElementById('saveTextKeyBtn').addEventListener('click', () => {
   }
 });
 
-// --- Кнопки ---
-const DEFAULT = { text: "🧸 Мишка — 15⭐", style: "", color: "#3a3d44" };
+// --- Кнопки: выбор конкретной кнопки меню для редактирования ---
+const STYLE_TO_COLOR = { '': '#3a3d44', primary: '#3390ec', success: '#34c759', danger: '#e05353' };
+const buttonsState = state.buttons || {};
+const buttonKeySelect = document.getElementById('buttonKeySelect');
 const textInput = document.getElementById('btnText');
 const preview = document.getElementById('preview');
 const charCount = document.getElementById('charCount');
 const premiumInput = document.getElementById('premiumEmoji');
-let selectedStyle = DEFAULT.style;
-let selectedColor = DEFAULT.color;
+let selectedStyle = '';
+let selectedColor = STYLE_TO_COLOR[''];
 
 function updatePreview() {
   preview.textContent = textInput.value || "Кнопка";
   preview.style.background = selectedColor;
   charCount.textContent = textInput.value.length;
 }
+
+function loadButtonKey(key) {
+  const b = buttonsState[key] || { text: '', style: null, icon_custom_emoji_id: '' };
+  textInput.value = b.text || '';
+  selectedStyle = b.style || '';
+  selectedColor = STYLE_TO_COLOR[selectedStyle] || STYLE_TO_COLOR[''];
+  premiumInput.value = b.icon_custom_emoji_id || '';
+  document.querySelectorAll('.color-opt').forEach(o => {
+    o.classList.toggle('selected', o.dataset.style === selectedStyle);
+  });
+  updatePreview();
+}
+loadButtonKey('buy');
+buttonKeySelect.addEventListener('change', () => loadButtonKey(buttonKeySelect.value));
+
 textInput.addEventListener('input', updatePreview);
 
 document.querySelectorAll('.color-opt').forEach(el => {
@@ -471,7 +530,84 @@ document.querySelectorAll('.color-opt').forEach(el => {
     updatePreview();
   });
 });
-updatePreview();
+
+document.getElementById('saveButtonBtn').addEventListener('click', () => {
+  const statusEl = document.getElementById('statusButtons');
+  const payload = {
+    action: 'save_button',
+    key: buttonKeySelect.value,
+    text: textInput.value.trim(),
+    style: selectedStyle || null,
+    icon_custom_emoji_id: premiumInput.value.trim(),
+  };
+  if (tg) {
+    tg.sendData(JSON.stringify(payload));
+    statusEl.textContent = 'Отправлено боту...';
+  } else {
+    statusEl.textContent = 'Открыто вне Telegram — сохранение недоступно.';
+  }
+});
+
+// --- Промокоды ---
+let promoCodes = state.promo_codes || [];
+
+function renderPromoList() {
+  const list = document.getElementById('promoList');
+  list.innerHTML = '';
+  if (!promoCodes.length) {
+    list.innerHTML = '<div class="hint">Промокодов пока нет.</div>';
+    return;
+  }
+  promoCodes.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'hg-item';
+    el.innerHTML = `
+      <div class="info">${p.code} — ${p.discount_percent}%<div class="sub">использован ${p.used}/${p.max_uses}</div></div>
+      <button class="remove" data-remove-promo="${p.code}">Удалить</button>
+    `;
+    list.appendChild(el);
+  });
+  document.querySelectorAll('[data-remove-promo]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.dataset.removePromo;
+      promoCodes = promoCodes.filter(p => p.code !== code);
+      renderPromoList();
+      if (tg) {
+        tg.sendData(JSON.stringify({ action: 'remove_promo_code', code }));
+        document.getElementById('statusPromo').textContent = 'Удалено.';
+      }
+    });
+  });
+}
+renderPromoList();
+
+document.getElementById('promoAddBtn').addEventListener('click', () => {
+  const code = document.getElementById('promoCode').value.trim();
+  const percent = document.getElementById('promoPercent').value.trim();
+  const maxUses = document.getElementById('promoMaxUses').value.trim();
+  const statusEl = document.getElementById('statusPromo');
+
+  if (!code || !percent || !maxUses) {
+    statusEl.textContent = 'Заполните все поля.';
+    return;
+  }
+
+  promoCodes = promoCodes.filter(p => p.code !== code.toUpperCase());
+  promoCodes.push({ code: code.toUpperCase(), discount_percent: Number(percent), max_uses: Number(maxUses), used: 0 });
+  renderPromoList();
+
+  if (tg) {
+    tg.sendData(JSON.stringify({
+      action: 'add_promo_code', code, discount_percent: Number(percent), max_uses: Number(maxUses),
+    }));
+    statusEl.textContent = 'Отправлено боту...';
+    document.getElementById('promoCode').value = '';
+    document.getElementById('promoPercent').value = '';
+    document.getElementById('promoMaxUses').value = '';
+  } else {
+    statusEl.textContent = 'Открыто вне Telegram — сохранение недоступно.';
+  }
+});
 
 // --- Скрытые подарки ---
 function renderHiddenGifts() {
