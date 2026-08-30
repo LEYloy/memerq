@@ -92,7 +92,7 @@
   h2 { font-size: 18px; margin: 8px 0 4px; }
   .hint { color: var(--muted); font-size: 13px; margin-bottom: 16px; line-height: 1.4; }
   label { display: block; font-size: 13px; color: var(--muted); margin: 16px 0 6px; }
-  textarea, input[type=text], input[type=number] {
+  textarea, input[type=text], input[type=number], select {
     width: 100%;
     padding: 12px;
     border-radius: 10px;
@@ -162,7 +162,7 @@
   <div class="card" data-view="texts">
     <span class="emoji">📝</span>
     <div class="name">Тексты</div>
-    <div class="desc">Все сообщения бота</div>
+    <div class="desc">Сообщение /start</div>
   </div>
   <div class="card" data-view="buttons">
     <span class="emoji icon-svg">
@@ -199,16 +199,15 @@
   <div class="back" data-back="1">‹ Назад</div>
   <h2>Тексты</h2>
   <div class="hint">
-    Все сообщения, которые отправляет бот. Поддерживается HTML-разметка
-    Telegram — выделите текст в любом поле и нажмите нужную кнопку тулбара.
-    Кнопка 🌟 вставляет Premium-эмодзи по его ID (работает только в
-    сообщениях, не в подписях кнопок, и показывается собеседнику только если
-    у владельца бота есть Telegram Premium или доп. юзернейм на Fragment).
-    Плейсхолдеры вида <code>{имя}</code> — не удаляйте их, туда бот подставит
-    реальные данные (сумму, получателя и т.п.).
+    Здесь можно менять КАЖДЫЙ текст, который отправляет бот. Выберите нужный
+    в списке ниже. Поддерживается форматирование Telegram и Premium-эмодзи —
+    выделите текст в поле и нажмите нужную кнопку тулбара.
   </div>
 
-  <div class="toolbar" id="textsToolbar">
+  <label>Какой текст редактировать</label>
+  <select id="textKeySelect"></select>
+
+  <div class="toolbar">
     <button class="b" data-wrap="b" title="Жирный">B</button>
     <button class="i" data-wrap="i" title="Курсив">I</button>
     <button class="u" data-wrap="u" title="Подчёркнутый">U</button>
@@ -216,13 +215,14 @@
     <button data-wrap="tg-spoiler" title="Спойлер">🙈</button>
     <button data-wrap="blockquote" title="Цитата">❝</button>
     <button data-wrap="code" title="Код">&lt;/&gt;</button>
-    <button data-emoji="1" title="Вставить Premium-эмодзи">🌟</button>
+    <button id="premiumEmojiWrapBtn" title="Premium-эмодзи">🌟</button>
   </div>
 
-  <div id="textsList"></div>
-
+  <textarea id="startText" maxlength="1024"></textarea>
+  <div class="counter"><span id="startCharCount">0</span>/1024</div>
+  <div class="note" id="textKeyDesc"></div>
   <div class="actions">
-    <button class="btn btn-save" id="textsSaveBtn">Сохранить все тексты</button>
+    <button class="btn btn-save" id="saveTextKeyBtn">Сохранить этот текст</button>
   </div>
   <div class="status" id="statusTexts"></div>
 </div>
@@ -344,7 +344,13 @@ if (botUsername) {
   }
 }
 
-let state = { hidden_gifts: [], menu_order: ['buy', 'hidden', 'profile', 'test'], referral_percent: 10 };
+let state = {
+  hidden_gifts: [],
+  menu_order: ['buy', 'hidden', 'profile', 'test'],
+  referral_percent: 10,
+  texts: { start_text: '' },
+  text_descriptions: { start_text: 'Сообщение /start' },
+};
 try {
   const raw = params.get('state');
   if (raw) state = { ...state, ...JSON.parse(atob(raw.replace(/-/g, '+').replace(/_/g, '/'))) };
@@ -370,161 +376,70 @@ document.querySelectorAll('[data-back]').forEach(btn => {
   });
 });
 
-// --- Тексты: полный список редактируемых сообщений бота ---
-// Структура (ключ/тип/подпись/плейсхолдеры/дефолт) — статична, поэтому
-// зашита прямо здесь, а не гоняется через URL мини-аппа. С сервера в state
-// приходят только реальные значения (text_overrides), см. python.
-const TEXT_FIELDS = [
-  { key: 'recipient_prompt', type: 'message', label: 'Запрос получателя', ph: [] },
-  { key: 'recipient_self_label', type: 'label', label: 'Кнопка «Себе»', ph: [] },
-  { key: 'recipient_cancel_label', type: 'label', label: 'Кнопка «Отмена»', ph: [] },
-  { key: 'recipient_cancelled', type: 'message', label: 'Сообщение об отмене', ph: [] },
-  { key: 'recipient_invalid', type: 'message', label: 'Некорректный получатель', ph: [] },
-  { key: 'recipient_checking', type: 'message', label: 'Идёт проверка получателя', ph: [] },
-  { key: 'recipient_owner_button', type: 'label', label: 'Кнопка «Написать владельцу»', ph: [] },
-  { key: 'recipient_blocked_note', type: 'message', label: 'Пояснение, если получатель недоступен', ph: [] },
-  { key: 'message_prompt', type: 'message', label: 'Запрос текста к подарку', ph: ['max_len'] },
-  { key: 'message_skip_label', type: 'label', label: 'Кнопка «Без текста»', ph: [] },
-  { key: 'message_too_long', type: 'message', label: 'Текст к подарку слишком длинный', ph: ['max_len'] },
-  { key: 'message_profanity', type: 'message', label: 'Найдены маты в тексте к подарку', ph: [] },
-  { key: 'payment_method_prompt', type: 'message', label: 'Выбор способа оплаты', ph: [] },
-  { key: 'payment_cryptobot_label', type: 'label', label: 'Кнопка «CryptoBot»', ph: [] },
-  { key: 'payment_xrocket_label', type: 'label', label: 'Кнопка «xRocket»', ph: [] },
-  { key: 'invoice_created', type: 'message', label: 'Счёт создан', ph: ['amount', 'asset'] },
-  { key: 'invoice_pay_button', type: 'label', label: 'Кнопка «Оплатить»', ph: [] },
-  { key: 'invoice_error', type: 'message', label: 'Ошибка создания счёта', ph: ['error'] },
-  { key: 'invoice_no_url', type: 'message', label: 'Не удалось получить ссылку на оплату', ph: [] },
-  { key: 'gift_sent_buyer', type: 'message', label: 'Подарок отправлен (покупателю)', ph: ['recipient'] },
-  { key: 'gift_failed_buyer', type: 'message', label: 'Подарок не удалось отправить (покупателю)', ph: ['error'] },
-  { key: 'hidden_empty', type: 'message', label: 'Скрытых подарков нет', ph: [] },
-  { key: 'hidden_list_title', type: 'message', label: 'Заголовок списка скрытых подарков', ph: [] },
-  { key: 'hidden_unavailable', type: 'message', label: 'Скрытый подарок недоступен', ph: [] },
-  { key: 'hidden_button_label', type: 'label', label: 'Кнопка «Скрытые подарки» в меню', ph: [] },
-  { key: 'profile_button_label', type: 'label', label: 'Кнопка «Профиль» в меню', ph: [] },
-  { key: 'profile_text', type: 'message', label: 'Текст профиля', ph: ['user_id', 'percent', 'ref_link', 'referrals_count', 'balance', 'asset'] },
-  { key: 'test_button_label', type: 'label', label: 'Кнопка «Тест» в меню', ph: [] },
-  { key: 'test_prompt', type: 'message', label: 'Запрос получателя (тест-режим)', ph: [] },
-  { key: 'test_sending', type: 'message', label: 'Отправка тестового подарка', ph: [] },
-  { key: 'test_sent', type: 'message', label: 'Тестовый подарок отправлен', ph: ['recipient'] },
-  { key: 'test_failed', type: 'message', label: 'Тестовый подарок не отправлен', ph: ['error'] },
-  { key: 'captcha_prompt_webapp', type: 'message', label: 'Капча: приглашение открыть мини-апп', ph: [] },
-  { key: 'captcha_prompt_buttons', type: 'message', label: 'Капча: вопрос (без мини-аппа)', ph: ['a', 'b'] },
-  { key: 'captcha_button_label', type: 'label', label: 'Кнопка «Пройти проверку»', ph: [] },
-  { key: 'captcha_passed', type: 'message', label: 'Капча пройдена', ph: [] },
-  { key: 'captcha_failed', type: 'message', label: 'Капча провалена', ph: [] },
-];
+// --- Тексты: список всех редактируемых текстов + rich text toolbar ---
+const startTextEl = document.getElementById('startText');
+const startCharCount = document.getElementById('startCharCount');
+const textKeySelect = document.getElementById('textKeySelect');
+const textKeyDescEl = document.getElementById('textKeyDesc');
 
-const textOverrides = state.text_overrides || {};
-let activeTextarea = null;
+// start_text хранится отдельно (в shop_config, не в texts.py), остальные — из texts.py
+const ALL_TEXTS = { start_text: state.start_text ?? '', ...state.texts };
+const ALL_DESCRIPTIONS = { start_text: 'Сообщение /start (главный экран магазина)', ...state.text_descriptions };
 
-const textsList = document.getElementById('textsList');
-TEXT_FIELDS.forEach(field => {
-  const wrap = document.createElement('div');
-  const limit = field.type === 'message' ? 1024 : 64;
-  const phHint = field.ph.length ? ` · плейсхолдеры: ${field.ph.map(p => '{' + p + '}').join(', ')}` : '';
-  wrap.innerHTML = `
-    <label>${field.label}${phHint}</label>
-    <textarea data-text-key="${field.key}" maxlength="${limit}" rows="${field.type === 'message' ? 3 : 1}"></textarea>
-    <div class="counter"><span data-count-for="${field.key}">0</span>/${limit}</div>
-  `;
-  textsList.appendChild(wrap);
-  const ta = wrap.querySelector('textarea');
-  ta.value = textOverrides[field.key] || '';
-  const counter = wrap.querySelector(`[data-count-for="${field.key}"]`);
-  counter.textContent = ta.value.length;
-  ta.addEventListener('input', () => { counter.textContent = ta.value.length; });
-  ta.addEventListener('focus', () => { activeTextarea = ta; });
-});
-// Первое поле — активное по умолчанию, чтобы тулбар сразу на что-то указывал.
-activeTextarea = textsList.querySelector('textarea');
-
-document.querySelectorAll('#textsToolbar [data-wrap]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (!activeTextarea) return;
-    const tag = btn.dataset.wrap;
-    const el = activeTextarea;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const selected = el.value.slice(start, end) || 'текст';
-    const wrapped = `<${tag}>${selected}</${tag}>`;
-    el.value = el.value.slice(0, start) + wrapped + el.value.slice(end);
-    el.focus();
-    el.selectionStart = start;
-    el.selectionEnd = start + wrapped.length;
-    el.dispatchEvent(new Event('input'));
-  });
+Object.keys(ALL_TEXTS).forEach(key => {
+  const opt = document.createElement('option');
+  opt.value = key;
+  opt.textContent = ALL_DESCRIPTIONS[key] || key;
+  textKeySelect.appendChild(opt);
 });
 
-document.querySelector('#textsToolbar [data-emoji]').addEventListener('click', () => {
-  if (!activeTextarea) return;
-  const el = activeTextarea;
-  const isLabel = el.dataset.textKey && TEXT_FIELDS.find(f => f.key === el.dataset.textKey)?.type === 'label';
-  if (isLabel) {
-    alert('Premium-эмодзи можно вставить только в сообщения, не в подписи кнопок.');
-    return;
-  }
-  const id = prompt('ID Premium-эмодзи (число, его можно получить через @tg_emoji_id_bot и т.п.):');
-  if (!id || !id.trim()) return;
+function loadTextKey(key) {
+  startTextEl.value = ALL_TEXTS[key] || '';
+  textKeyDescEl.textContent = 'Ключ: ' + key;
+  startCharCount.textContent = startTextEl.value.length;
+}
+loadTextKey('start_text');
+textKeySelect.addEventListener('change', () => loadTextKey(textKeySelect.value));
+
+startTextEl.addEventListener('input', () => {
+  startCharCount.textContent = startTextEl.value.length;
+});
+
+function wrapSelection(before, after) {
+  const el = startTextEl;
   const start = el.selectionStart;
   const end = el.selectionEnd;
-  const selectedEmoji = el.value.slice(start, end).trim() || '🙂';
-  const wrapped = `<tg-emoji emoji-id="${id.trim()}">${selectedEmoji}</tg-emoji>`;
+  const selected = el.value.slice(start, end) || 'текст';
+  const wrapped = `${before}${selected}${after}`;
   el.value = el.value.slice(0, start) + wrapped + el.value.slice(end);
   el.focus();
   el.selectionStart = start;
   el.selectionEnd = start + wrapped.length;
-  el.dispatchEvent(new Event('input'));
-});
-
-document.getElementById('textsSaveBtn').addEventListener('click', () => {
-  const statusEl = document.getElementById('statusTexts');
-  const values = {};
-  document.querySelectorAll('[data-text-key]').forEach(ta => {
-    values[ta.dataset.textKey] = ta.value.trim();
-  });
-  if (tg) {
-    tg.sendData(JSON.stringify({ action: 'save_all_texts', values }));
-    statusEl.textContent = 'Отправлено боту...';
-  } else {
-    statusEl.textContent = 'Открыто вне Telegram — сохранение недоступно.';
-  }
-});
-
-// --- Текст /start (сохраняется отдельным действием save_texts) ---
-const startTextEl = document.createElement('textarea');
-startTextEl.id = 'startText';
-startTextEl.maxLength = 1024;
-{
-  const startWrap = document.createElement('div');
-  startWrap.innerHTML = `
-    <label style="margin-top:24px;">Текст /start (главное сообщение магазина)</label>
-  `;
-  const counterWrap = document.createElement('div');
-  counterWrap.className = 'counter';
-  counterWrap.innerHTML = '<span id="startCharCount">0</span>/1024';
-  const saveWrap = document.createElement('div');
-  saveWrap.className = 'actions';
-  saveWrap.innerHTML = '<button class="btn btn-save" id="startTextSaveBtn">Сохранить текст /start</button>';
-  const statusWrap = document.createElement('div');
-  statusWrap.className = 'status';
-  statusWrap.id = 'statusStartText';
-
-  textsList.parentNode.insertBefore(startWrap, textsList);
-  textsList.parentNode.insertBefore(startTextEl, textsList);
-  textsList.parentNode.insertBefore(counterWrap, textsList);
-  textsList.parentNode.insertBefore(saveWrap, textsList);
-  textsList.parentNode.insertBefore(statusWrap, textsList);
+  startCharCount.textContent = el.value.length;
 }
-startTextEl.value = state.start_text || '';
-document.getElementById('startCharCount').textContent = startTextEl.value.length;
-startTextEl.addEventListener('input', () => {
-  document.getElementById('startCharCount').textContent = startTextEl.value.length;
+
+document.querySelectorAll('[data-wrap]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tag = btn.dataset.wrap;
+    wrapSelection(`<${tag}>`, `</${tag}>`);
+  });
 });
-startTextEl.addEventListener('focus', () => { activeTextarea = startTextEl; });
-document.getElementById('startTextSaveBtn').addEventListener('click', () => {
-  const statusEl = document.getElementById('statusStartText');
+
+document.getElementById('premiumEmojiWrapBtn').addEventListener('click', () => {
+  const id = prompt('ID Premium-эмодзи (число из ссылки на стикер-эмодзи):');
+  if (!id) return;
+  wrapSelection(`<tg-emoji emoji-id="${id.trim()}">`, `</tg-emoji>`);
+});
+
+document.getElementById('saveTextKeyBtn').addEventListener('click', () => {
+  const key = textKeySelect.value;
+  const statusEl = document.getElementById('statusTexts');
+  const payload = key === 'start_text'
+    ? { action: 'save_texts', start_text: startTextEl.value.trim() }
+    : { action: 'save_text_key', key, text: startTextEl.value.trim() };
+
   if (tg) {
-    tg.sendData(JSON.stringify({ action: 'save_texts', start_text: startTextEl.value.trim() }));
+    tg.sendData(JSON.stringify(payload));
     statusEl.textContent = 'Отправлено боту...';
   } else {
     statusEl.textContent = 'Открыто вне Telegram — сохранение недоступно.';
@@ -533,19 +448,12 @@ document.getElementById('startTextSaveBtn').addEventListener('click', () => {
 
 // --- Кнопки ---
 const DEFAULT = { text: "🧸 Мишка — 15⭐", style: "", color: "#3a3d44" };
-const STYLE_COLORS = { '': '#3a3d44', primary: '#3390ec', success: '#34c759', danger: '#e05353' };
 const textInput = document.getElementById('btnText');
 const preview = document.getElementById('preview');
 const charCount = document.getElementById('charCount');
 const premiumInput = document.getElementById('premiumEmoji');
-let selectedStyle = state.button_style || DEFAULT.style;
-let selectedColor = STYLE_COLORS[selectedStyle || ''] || DEFAULT.color;
-
-textInput.value = state.button_text || DEFAULT.text;
-premiumInput.value = state.icon_custom_emoji_id || '';
-document.querySelectorAll('.color-opt').forEach(el => {
-  el.classList.toggle('selected', (el.dataset.style || '') === (selectedStyle || ''));
-});
+let selectedStyle = DEFAULT.style;
+let selectedColor = DEFAULT.color;
 
 function updatePreview() {
   preview.textContent = textInput.value || "Кнопка";
@@ -679,16 +587,25 @@ document.getElementById('refSaveBtn').addEventListener('click', () => {
   }
 });
 
-// --- сохранение (Кнопки) ---
-document.querySelectorAll('[data-save="buttons"]').forEach(btn => {
+// --- сохранение (Тексты/Кнопки) ---
+document.querySelectorAll('[data-save]').forEach(btn => {
   btn.addEventListener('click', () => {
-    const payload = {
-      action: 'save_button',
-      text: textInput.value.trim() || DEFAULT.text,
-      style: selectedStyle || null,
-      icon_custom_emoji_id: premiumInput.value.trim(),
-    };
-    const statusEl = document.getElementById('statusButtons');
+    const kind = btn.dataset.save;
+    let payload, statusEl;
+
+    if (kind === 'texts') {
+      payload = { action: 'save_texts', start_text: startTextEl.value.trim() };
+      statusEl = document.getElementById('statusTexts');
+    } else {
+      payload = {
+        action: 'save_button',
+        text: textInput.value.trim() || DEFAULT.text,
+        style: selectedStyle || null,
+        icon_custom_emoji_id: premiumInput.value.trim(),
+      };
+      statusEl = document.getElementById('statusButtons');
+    }
+
     if (tg) {
       tg.sendData(JSON.stringify(payload));
       statusEl.textContent = "Отправлено боту...";
